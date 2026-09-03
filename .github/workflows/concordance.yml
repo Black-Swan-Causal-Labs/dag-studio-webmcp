@@ -6,7 +6,7 @@
 # smoke checks. All defined in dag-engine.test.js using only Node
 # built-ins, so no install step is required.
 
-name: Engine validation
+name: Engine and WebMCP validation
 
 on:
   pull_request:
@@ -15,6 +15,8 @@ on:
       - 'dag-engine.d.ts'
       - 'dag-engine.test.js'
       - 'dag-engine.simulate-baseline.json'
+      - 'webmcp-tools.js'
+      - 'webmcp-tools.test.js'
       - '.github/workflows/concordance.yml'
   push:
     branches: [main]
@@ -23,6 +25,8 @@ on:
       - 'dag-engine.d.ts'
       - 'dag-engine.test.js'
       - 'dag-engine.simulate-baseline.json'
+      - 'webmcp-tools.js'
+      - 'webmcp-tools.test.js'
   # Nightly run catches drift when neither the engine nor the test has
   # changed (e.g. a Node minor bump that shifts libm by 1 ULP).
   schedule:
@@ -34,12 +38,12 @@ permissions:
 
 jobs:
   engine:
-    name: Engine validation suite (T01–T15 + EM01–EM20 + simulate baseline)
+    name: Engine and WebMCP shared-state tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Run engine tests
-        run: node --test dag-engine.test.js
+      - name: Run engine and WebMCP tests
+        run: npm test
