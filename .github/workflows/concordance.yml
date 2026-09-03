@@ -18,6 +18,7 @@ on:
       - 'webmcp-tools.js'
       - 'webmcp-tools.test.js'
       - '.github/workflows/concordance.yml'
+      - '.github/workflows/concordance.yml'
   push:
     branches: [main]
     paths:
@@ -44,6 +45,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Run engine and WebMCP tests
         run: npm test
