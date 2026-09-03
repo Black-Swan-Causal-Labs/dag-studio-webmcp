@@ -1,0 +1,21 @@
+name = "dag-studio-ai-proxy"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+
+# The Gemini key is NOT stored here. Set it as an encrypted secret instead:
+#   wrangler secret put GEMINI_API_KEY
+#
+# Use a NEW free-tier key, separate from the SPIFD2 proxy, so the two apps do not
+# share a quota. Create it at https://aistudio.google.com/apikey with billing
+# disabled.
+#
+# After the first `wrangler deploy`, the Worker is reachable at:
+#   https://dag-studio-ai-proxy.<your-subdomain>.workers.dev
+#
+# To serve it from your own domain (optional; keeps a clean host for the Origin
+# guard), bind a custom domain. Your domain must be on Cloudflare. Uncomment and
+# adjust:
+#
+# routes = [
+#   { pattern = "dag-studio-ai.blackswancausallabs.com", custom_domain = true }
+# ]

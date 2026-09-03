@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+
+# Local-only builder notes (planning, status snapshots, briefs, rationale)
+notes/
+*-brief.md
+
+# Nested private repo: dag-studio-mcp source (lives on a separate private GitHub repo)
+dagstudio-mcp-new/
+
+# Builder docs and drafts kept local
+FDA_GUIDANCE_ALIGNMENT.md
+MCP_REQUIREMENTS.md
+dag-studio-mcp/
+*-preprint*.docx
+~$*.docx

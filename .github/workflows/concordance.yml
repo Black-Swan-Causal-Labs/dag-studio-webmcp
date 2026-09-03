@@ -1,0 +1,45 @@
+# Engine validation suite.
+#
+# Runs T01–T15 backdoor / adjustment-set parity, EM01–EM20 effect-
+# modification classifier parity, simulateData numerical equivalence
+# against the captured pre-refactor baseline, and parser / code-generator
+# smoke checks. All defined in dag-engine.test.js using only Node
+# built-ins, so no install step is required.
+
+name: Engine validation
+
+on:
+  pull_request:
+    paths:
+      - 'dag-engine.js'
+      - 'dag-engine.d.ts'
+      - 'dag-engine.test.js'
+      - 'dag-engine.simulate-baseline.json'
+      - '.github/workflows/concordance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'dag-engine.js'
+      - 'dag-engine.d.ts'
+      - 'dag-engine.test.js'
+      - 'dag-engine.simulate-baseline.json'
+  # Nightly run catches drift when neither the engine nor the test has
+  # changed (e.g. a Node minor bump that shifts libm by 1 ULP).
+  schedule:
+    - cron: '0 6 * * *'  # 06:00 UTC daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    name: Engine validation suite (T01–T15 + EM01–EM20 + simulate baseline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run engine tests
+        run: node --test dag-engine.test.js

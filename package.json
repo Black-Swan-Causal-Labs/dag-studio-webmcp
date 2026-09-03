@@ -1,0 +1,24 @@
+{
+  "name": "dag-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser-based DAG editor with d-separation engine and training library for pharmacoepidemiology and real-world evidence research.",
+  "author": "John D. Diaz-Decaro <john@blackswancausallabs.com>",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test dag-engine.test.js webmcp-tools.test.js"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.5"
+  }
+}
