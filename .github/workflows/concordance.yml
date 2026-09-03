@@ -18,7 +18,6 @@ on:
       - 'webmcp-tools.js'
       - 'webmcp-tools.test.js'
       - '.github/workflows/concordance.yml'
-      - '.github/workflows/concordance.yml'
   push:
     branches: [main]
     paths:
@@ -28,6 +27,7 @@ on:
       - 'dag-engine.simulate-baseline.json'
       - 'webmcp-tools.js'
       - 'webmcp-tools.test.js'
+      - '.github/workflows/concordance.yml'
   # Nightly run catches drift when neither the engine nor the test has
   # changed (e.g. a Node minor bump that shifts libm by 1 ULP).
   schedule:
