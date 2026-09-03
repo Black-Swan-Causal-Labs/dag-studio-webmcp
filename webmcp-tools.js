@@ -2,9 +2,13 @@ import {
   computeAdjustmentSets,
   detectTypeConflicts,
   dSeparated,
+  computeCorrelation,
+  computeOLSCoefficients,
+  computeTrueEffect,
   generatePythonCode,
   generateRCode,
   hasCycle,
+  simulateData,
 } from './dag-engine.js';
 
 export const WEBMCP_TOOL_NAMES = [
@@ -16,7 +20,14 @@ export const WEBMCP_TOOL_NAMES = [
   'analyze_current_dag',
   'check_adjustment_set',
   'generate_analysis_code',
+  'simulate_current_dag',
 ];
+
+const SIMULATION_SAMPLE_SIZES = [100, 500, 1000, 2500, 5000, 10000];
+const DEFAULT_EDGE_COEFFICIENT = 0.5;
+const ERROR_STANDARD_DEVIATION = 0.5;
+const PREVIEW_ROWS = 10;
+const MAX_CORRELATION_MATRIX_NODES = 20;
 
 const schema = (properties = {}, required = []) => ({
   type: 'object',
@@ -27,6 +38,45 @@ const schema = (properties = {}, required = []) => ({
 const textResult = value => ({
   content: [{ type: 'text', text: JSON.stringify(value, null, 2) }],
 });
+
+const rounded = value => {
+  if (!Number.isFinite(value)) return null;
+  const result = Number(value.toFixed(6));
+  return Object.is(result, -0) ? 0 : result;
+};
+
+function summarizeSimulation(data, order, nodeMap) {
+  const values = Object.fromEntries(order.map(id => [id, data.map(row => row[id])]));
+  const variableSummaries = order.map(id => {
+    const series = values[id];
+    const mean = series.reduce((sum, value) => sum + value, 0) / series.length;
+    const variance = series.reduce((sum, value) => sum + (value - mean) ** 2, 0) / series.length;
+    return {
+      id,
+      label: nodeMap[id]?.label || id,
+      mean: rounded(mean),
+      standard_deviation: rounded(Math.sqrt(variance)),
+    };
+  });
+
+  const correlationMatrix = order.length <= MAX_CORRELATION_MATRIX_NODES
+    ? Object.fromEntries(order.map(rowId => [
+        rowId,
+        Object.fromEntries(order.map(columnId => [
+          columnId,
+          rounded(computeCorrelation(values[rowId], values[columnId])),
+        ])),
+      ]))
+    : null;
+
+  return {
+    variable_summaries: variableSummaries,
+    correlation_matrix: correlationMatrix,
+    correlation_matrix_note: correlationMatrix
+      ? null
+      : `Omitted because the DAG has more than ${MAX_CORRELATION_MATRIX_NODES} variables.`,
+  };
+}
 
 export function createDagStudioTools({
   nodesRef,
@@ -41,6 +91,7 @@ export function createDagStudioTools({
   getCanvasRect = () => null,
   createEdgeId = () => `webmcp-edge-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   onAgentChange = () => {},
+  onSimulation = () => {},
 }) {
   const currentDag = () => ({
     nodes: nodesRef.current,
@@ -203,6 +254,130 @@ export function createDagStudioTools({
           ? generateRCode(dag.nodes, dag.edges, dag.exposure, dag.outcome)
           : generatePythonCode(dag.nodes, dag.edges, dag.exposure, dag.outcome);
         return textResult({ language, code });
+      },
+    },
+    {
+      name: 'simulate_current_dag',
+      description: 'Simulate reproducible data from the exact current canvas using DAG Studio\'s existing linear Gaussian SEM, show the result in the visible simulation panel, and return bounded summaries for comparing causal hypotheses. Results describe implications of the encoded model, not evidence that the model is scientifically correct.',
+      inputSchema: schema({
+        run_label: {
+          type: 'string',
+          description: 'A short label used to distinguish this result from another hypothesis, for example "Hypothesis A".',
+        },
+        sample_size: {
+          type: 'integer',
+          enum: SIMULATION_SAMPLE_SIZES,
+          description: 'Number of observations to simulate. Defaults to 1000.',
+        },
+        seed: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 2147483647,
+          description: 'Reproducible random seed. Defaults to 42.',
+        },
+        edge_coefficients: {
+          type: 'object',
+          description: 'Optional coefficient overrides keyed by exact node-id edge strings such as "exposure->outcome". Unspecified edges use 0.5.',
+          additionalProperties: { type: 'number' },
+        },
+      }),
+      execute: input => {
+        const dag = currentDag();
+        if (!dag.nodes.length) throw new Error('Add at least one node before simulating data.');
+        if (!dag.exposure || !dag.outcome) throw new Error('Set both exposure and outcome before simulating data.');
+        if (hasCycle(dag.nodes, dag.edges)) throw new Error('Data simulation requires an acyclic graph.');
+
+        const sampleSize = input.sample_size ?? 1000;
+        if (!SIMULATION_SAMPLE_SIZES.includes(sampleSize)) {
+          throw new Error(`Sample size must be one of: ${SIMULATION_SAMPLE_SIZES.join(', ')}.`);
+        }
+        const seed = input.seed ?? 42;
+        if (!Number.isSafeInteger(seed) || seed < 0 || seed > 2147483647) {
+          throw new Error('Seed must be an integer from 0 through 2147483647.');
+        }
+
+        const runLabel = input.run_label?.trim() || 'Simulation';
+        const coefficientOverrides = input.edge_coefficients || {};
+        const edgeKeys = new Set(dag.edges.map(edge => `${edge.src}->${edge.tgt}`));
+        for (const [key, value] of Object.entries(coefficientOverrides)) {
+          if (!edgeKeys.has(key)) throw new Error(`Coefficient key '${key}' is not an edge in the current DAG.`);
+          if (!Number.isFinite(value)) throw new Error(`Coefficient for '${key}' must be a finite number.`);
+        }
+        const resolvedCoefficients = Object.fromEntries(dag.edges.map(edge => {
+          const key = `${edge.src}->${edge.tgt}`;
+          return [key, coefficientOverrides[key] ?? DEFAULT_EDGE_COEFFICIENT];
+        }));
+
+        const nodeMap = Object.fromEntries(dag.nodes.map(node => [node.id, node]));
+        const result = simulateData(dag.nodes, dag.edges, sampleSize, seed, resolvedCoefficients);
+        const summaries = summarizeSimulation(result.data, result.order, nodeMap);
+        const trueResult = computeTrueEffect(dag.exposure, dag.outcome, dag.edges, resolvedCoefficients);
+        const crudeCoefficients = computeOLSCoefficients(result.data, dag.outcome, [dag.exposure]);
+        const adjustmentResult = computeAdjustmentSets(dag.exposure, dag.outcome, dag.nodes, dag.edges);
+        const adjustmentSet = adjustmentResult?.sets?.[0] || [];
+        const adjustedCoefficients = computeOLSCoefficients(
+          result.data,
+          dag.outcome,
+          [dag.exposure, ...adjustmentSet],
+        );
+        const trueEffect = rounded(trueResult.totalEffect);
+        const crudeEstimate = rounded(crudeCoefficients?.[1]);
+        const adjustedEstimate = rounded(adjustedCoefficients?.[1]);
+
+        onSimulation({
+          ...result,
+          nodeMap,
+          runLabel,
+          sampleSize,
+          seed,
+          coefficients: resolvedCoefficients,
+        });
+        onAgentChange(`Agent simulated data for “${runLabel}”`, [], []);
+
+        return textResult({
+          ok: true,
+          action: 'simulated_current_dag',
+          run_label: runLabel,
+          dag,
+          simulation: {
+            model: 'linear_gaussian_sem',
+            sample_size: sampleSize,
+            seed,
+            root_distribution: 'normal_mean_0_variance_1',
+            default_edge_coefficient: DEFAULT_EDGE_COEFFICIENT,
+            error_standard_deviation: ERROR_STANDARD_DEVIATION,
+            error_variance: ERROR_STANDARD_DEVIATION ** 2,
+            edge_coefficients: resolvedCoefficients,
+          },
+          ...summaries,
+          effect_estimates: {
+            exposure: dag.exposure,
+            outcome: dag.outcome,
+            true_total_effect: trueEffect,
+            directed_causal_paths: trueResult.paths.map(path => ({
+              path: path.path,
+              effect: rounded(path.coef),
+            })),
+            paths_truncated: trueResult.truncated,
+            crude_ols: {
+              beta: crudeEstimate,
+              bias_from_true_total_effect: crudeEstimate === null || trueEffect === null
+                ? null
+                : rounded(crudeEstimate - trueEffect),
+            },
+            minimally_adjusted_ols: {
+              beta: adjustedEstimate,
+              adjustment_set: adjustmentSet,
+              bias_from_true_total_effect: adjustedEstimate === null || trueEffect === null
+                ? null
+                : rounded(adjustedEstimate - trueEffect),
+            },
+          },
+          preview: result.data.slice(0, PREVIEW_ROWS).map(row => Object.fromEntries(
+            result.order.map(id => [id, rounded(row[id])]),
+          )),
+          caveat: 'This simulation shows consequences of the encoded DAG and coefficients. It does not determine which causal hypothesis is scientifically correct.',
+        });
       },
     },
   ];

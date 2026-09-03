@@ -23,6 +23,7 @@ This enables a two-way collaboration that was difficult before:
 3. The researcher immediately sees, moves, edits, accepts, or undoes it.
 4. Human canvas edits are immediately visible to the agent.
 5. The existing causal engine verifies backdoor paths and adjustment implications.
+6. The agent can simulate reproducible data under competing DAG hypotheses and compare their structural and statistical implications.
 
 ## Live demonstration
 
@@ -46,6 +47,7 @@ The graph updates in place. Move the new node manually, then ask the agent to re
 | `analyze_current_dag` | Returns open backdoor paths, minimal sufficient adjustment sets, identifiability, and diagnostics. |
 | `check_adjustment_set` | Checks a proposed set against the encoded backdoor paths. |
 | `generate_analysis_code` | Generates R/dagitty or Python/NetworkX code for the live graph. |
+| `simulate_current_dag` | Runs the existing linear Gaussian SEM for the live graph, opens the visible simulation result, and returns bounded summaries, correlations, effect estimates, and a 10-row preview. |
 
 The integration prefers the current `document.modelContext` API and includes a temporary `navigator.modelContext` fallback for hosts implementing an earlier WebMCP draft.
 
@@ -57,11 +59,12 @@ Researcher edits canvas ─┐
 Agent calls WebMCP tools ┘                    │
                                              ├─ paths and adjustment sets
                                              ├─ diagnostics
-                                             └─ R/Python generation
+                                             ├─ R/Python generation
+                                             └─ reproducible simulation summaries
 ```
 
 - `index.html` contains the existing React DAG Studio interface.
-- `webmcp-tools.js` defines and registers the eight tools through dependency-injected access to the canvas's state refs and mutation wrappers.
+- `webmcp-tools.js` defines and registers the nine tools through dependency-injected access to the canvas's state refs, mutation wrappers, and existing simulation engine.
 - `dag-engine.js` and `dag-engine.d.ts` are the existing DAG Studio causal engine and type declarations. The Challenge work calls this engine; it does not rewrite its causal algorithms.
 - The graph, analysis, undo history, and WebMCP operations remain client-side.
 - The static build is hosted over HTTPS on Cloudflare Pages.
@@ -98,11 +101,11 @@ The original application did **not** expose WebMCP tools, attribute agent graph 
 
 The following work was added during the Challenge submission period after August 25, 2026:
 
-- eight imperative WebMCP tools;
+- nine WebMCP tools, including reproducible simulation of the live DAG;
 - direct wiring from those tools to the canvas's existing shared state;
 - WebMCP connection diagnostics and current/earlier API compatibility;
 - visible, undoable agent-change attribution;
-- automated tests for tool registration, agent mutations, human-to-agent state visibility, edge/node removal, cycle rejection, engine analysis, adjustment checks, and code generation;
+- automated tests for tool registration, agent mutations, human-to-agent state visibility, edge/node removal, cycle rejection, engine analysis, adjustment checks, code generation, simulation reproducibility, bounded results, and input validation;
 - an isolated HTTPS sandbox that does not alter production DAG Studio; and
 - Challenge-specific documentation and demo instructions.
 
@@ -124,7 +127,7 @@ npm test
 npm run build
 ```
 
-The test command runs both the original DAG engine parity suite and the WebMCP/shared-state suite. A successful run currently reports 10 passing tests. The production build is a static `dist/` directory suitable for any HTTPS static host.
+The test command runs both the original DAG engine parity suite and the WebMCP/shared-state suite. The production build is a static `dist/` directory suitable for any HTTPS static host.
 
 ## Scientific basis
 

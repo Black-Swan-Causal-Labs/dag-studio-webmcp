@@ -2309,6 +2309,13 @@ function DAGStudio() {
       getCanvasRect: () => svgRef.current && svgRef.current.getBoundingClientRect(),
       createEdgeId: euid,
       onAgentChange: noteAgentChange,
+      onSimulation: result => {
+        setSimSampleSize(result.sampleSize);
+        setSimSeed(result.seed);
+        setSimData(result);
+        setOpenSections(previous => ({ ...previous, simulation: true }));
+        setSimPreview(true);
+      },
     }, { signal: controller.signal }).then(tools => {
       window.__DAG_STUDIO_WEBMCP__.registered = tools.map(tool => tool.name);
       window.__DAG_STUDIO_WEBMCP__.status = 'ready';
@@ -2848,7 +2855,7 @@ function DAGStudio() {
   // panel was open. analysis stands in for graph structure in the deps.
   const regressionStats = React.useMemo(() => {
     if (!simData || !exposure || !outcome) return null;
-    const trueResult = computeTrueEffect(exposure, outcome, edges);
+    const trueResult = computeTrueEffect(exposure, outcome, edges, simData.coefficients || {});
     const crudeBeta = computeOLSCoefficients(simData.data, outcome, [exposure]);
     const Z = Array.from(adjustedZ);
     const adjBeta = Z.length > 0 ? computeOLSCoefficients(simData.data, outcome, [exposure, ...Z]) : null;
@@ -3494,7 +3501,7 @@ function DAGStudio() {
   }, v === 'about' ? 'About' : v === 'studio' ? 'Studio' : v === 'validation' ? 'Validation' : v === 'ai' ? 'AI DAG Assistant' : v === 'library' ? 'Education Library' : 'FAQ'))), /*#__PURE__*/React.createElement("div", {
     className: "nav-right"
   },
-    /*#__PURE__*/React.createElement("div", { className: "nav-proto", title: webmcpStatus === 'ready' ? 'Eight agent tools are connected to this canvas' : webmcpStatus === 'registration-error' ? 'The browser exposed WebMCP, but one or more tools were rejected. See the browser console or window.__DAG_STUDIO_WEBMCP__.' : webmcpStatus === 'api-missing' ? 'This browser session exposes neither the current document.modelContext API nor the earlier navigator.modelContext API.' : 'Checking WebMCP availability…' }, webmcpStatus === 'ready' ? "WebMCP connected" : webmcpStatus === 'registration-error' ? "WebMCP error" : webmcpStatus === 'api-missing' ? "WebMCP unavailable" : "Checking WebMCP…"),
+    /*#__PURE__*/React.createElement("div", { className: "nav-proto", title: webmcpStatus === 'ready' ? 'Nine agent tools are connected to this canvas' : webmcpStatus === 'registration-error' ? 'The browser exposed WebMCP, but one or more tools were rejected. See the browser console or window.__DAG_STUDIO_WEBMCP__.' : webmcpStatus === 'api-missing' ? 'This browser session exposes neither the current document.modelContext API nor the earlier navigator.modelContext API.' : 'Checking WebMCP availability…' }, webmcpStatus === 'ready' ? "WebMCP connected" : webmcpStatus === 'registration-error' ? "WebMCP error" : webmcpStatus === 'api-missing' ? "WebMCP unavailable" : "Checking WebMCP…"),
     /*#__PURE__*/React.createElement("div", {
       className: "theme-toggle",
       onClick: () => setDarkMode(d => !d),
@@ -4743,7 +4750,7 @@ SHOW_EFFECT_MODIFICATION && modifiers.length > 0 && /*#__PURE__*/React.createEle
           color: '#166534',
           marginBottom: 8
         }
-      }, "✓ Generated ", simData.data.length.toLocaleString(), " observations across ", simData.order.length, " variables"),
+      }, simData.runLabel ? `${simData.runLabel}: ` : '', "✓ Generated ", simData.data.length.toLocaleString(), " observations across ", simData.order.length, " variables"),
       
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8 } },
         /*#__PURE__*/React.createElement("button", {
