@@ -63,12 +63,11 @@ npm run deploy --prefix mcp-bridge
 npm run build
 npx wrangler pages deploy dist --project-name dag-studio-webmcp-sandbox --branch webmcp-challenge
 mcp-publisher validate server.json
-mcp-publisher login github
-mcp-publisher publish server.json
+gh workflow run publish-mcp.yml --ref main
 ```
 
 The existing Pages production branch is `webmcp-challenge`; `main` uploads are previews.
 
-Run an authenticated smoke test against the deployed studio before publishing. `server.json` records the organization namespace and connection requirements. The browser's default relay URL and Wrangler's studio-origin allowlist must agree with the deployment. Future deployments are manual; commits do not publish automatically.
+Run an authenticated smoke test against the deployed studio before publishing. `server.json` records the organization namespace and connection requirements. The browser's default relay URL and Wrangler's studio-origin allowlist must agree with the deployment. Site and Worker deployments remain manual. Registry publication uses the manually dispatched `Publish MCP Registry listing` workflow, with GitHub OIDC and no stored registry secret. Commits do not publish automatically.
 
 The source is intentionally identical between the two bridge Workers except for configuration and application wiring. Keep protocol/security fixes synchronized across both repositories.
