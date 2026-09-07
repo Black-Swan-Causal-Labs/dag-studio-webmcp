@@ -1,0 +1,52 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dag-studio-webmcp-bridge",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-07",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SESSIONS",
+        "class_name": "CanvasSession"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "CanvasSession"
+      ]
+    }
+  ],
+  "vars": {
+    "SERVER_NAME": "dag-studio-webmcp-bridge",
+    "STUDIO_ORIGINS": "https://dag-studio-webmcp-sandbox.pages.dev",
+    "TOOL_NAMES": "get_current_dag,add_node,remove_node,add_edge,remove_edge,analyze_current_dag,check_adjustment_set,generate_analysis_code,simulate_current_dag"
+  },
+  "ratelimits": [
+    {
+      "name": "CREATE_LIMIT",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    },
+    {
+      "name": "REQUEST_LIMIT",
+      "namespace_id": "1002",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  }
+}

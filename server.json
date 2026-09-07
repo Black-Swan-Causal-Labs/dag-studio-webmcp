@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Black-Swan-Causal-Labs/dag-studio-webmcp",
+  "title": "DAG Studio WebMCP",
+  "description": "Read and edit a live DAG Studio canvas through its predefined WebMCP tools.",
+  "version": "1.0.0",
+  "repository": {
+    "url": "https://github.com/Black-Swan-Causal-Labs/dag-studio-webmcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://dag-studio-webmcp-sandbox.pages.dev",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://dag-studio-webmcp-bridge.jdiazdecaro.workers.dev/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Open the studio, select Connect MCP, enable a connection, and copy its full Authorization header. Keep the page open. Expires in two hours.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

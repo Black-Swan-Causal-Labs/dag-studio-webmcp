@@ -74,7 +74,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;-webkit-font-smoothing:antialias
 .nav-tab.on{color:var(--text-primary);border-bottom-color:var(--text-primary)}
 .dark .nav-tab.on{border-bottom-color:var(--accent)}
 .nav-proto{font-size:9px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--bg-secondary);background:var(--ink-soft);border-radius:3px;padding:4px 10px;font-family:var(--font-mono);cursor:default;transition:background .2s}
-.nav-right{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-shrink:0}
 .dark .nav-proto{background:var(--accent);color:var(--ink)}
 .nav-proto::before{display:none}
 .nav-proto:hover{background:var(--ink)}
@@ -2283,11 +2283,6 @@ function DAGStudio() {
     // temporary compatibility fallback for hosts implementing an earlier draft.
     const modelContext = document.modelContext || navigator.modelContext;
     const apiSource = document.modelContext ? 'document.modelContext' : navigator.modelContext ? 'navigator.modelContext' : null;
-    if (!modelContext || !modelContext.registerTool) {
-      setWebmcpStatus('api-missing');
-      window.__DAG_STUDIO_WEBMCP__ = { status: 'api-missing', apiSource: null, registered: [], error: 'Neither document.modelContext nor navigator.modelContext is available in this browser session.' };
-      return;
-    }
     const controller = new AbortController();
     const noteAgentChange = (label, nodeIds = [], edgeIds = []) => {
       const stamp = Date.now();
@@ -2318,8 +2313,9 @@ function DAGStudio() {
       },
     }, { signal: controller.signal }).then(tools => {
       window.__DAG_STUDIO_WEBMCP__.registered = tools.map(tool => tool.name);
-      window.__DAG_STUDIO_WEBMCP__.status = 'ready';
-      setWebmcpStatus('ready');
+      const status = modelContext?.registerTool ? 'ready' : 'api-missing';
+      window.__DAG_STUDIO_WEBMCP__.status = status;
+      setWebmcpStatus(status);
     }).catch(error => {
       const message = error && error.message ? error.message : String(error);
       window.__DAG_STUDIO_WEBMCP__.status = 'registration-error';
@@ -3500,7 +3496,7 @@ function DAGStudio() {
     onClick: () => setView(v)
   }, v === 'about' ? 'About' : v === 'studio' ? 'Studio' : v === 'validation' ? 'Validation' : v === 'ai' ? 'AI DAG Assistant' : v === 'library' ? 'Education Library' : 'FAQ'))), /*#__PURE__*/React.createElement("div", {
     className: "nav-right"
-  },
+  }, /*#__PURE__*/React.createElement("span", { id: "canvas-mcp-control" }),
     /*#__PURE__*/React.createElement("div", { className: "nav-proto", title: webmcpStatus === 'ready' ? 'Nine agent tools are connected to this canvas' : webmcpStatus === 'registration-error' ? 'The browser exposed WebMCP, but one or more tools were rejected. See the browser console or window.__DAG_STUDIO_WEBMCP__.' : webmcpStatus === 'api-missing' ? 'This browser session exposes neither the current document.modelContext API nor the earlier navigator.modelContext API.' : 'Checking WebMCP availability…' }, webmcpStatus === 'ready' ? "WebMCP connected" : webmcpStatus === 'registration-error' ? "WebMCP error" : webmcpStatus === 'api-missing' ? "WebMCP unavailable" : "Checking WebMCP…"),
     /*#__PURE__*/React.createElement("div", {
       className: "theme-toggle",

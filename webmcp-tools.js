@@ -1,3 +1,4 @@
+import { mountCanvasBridge } from './mcp-bridge/browser.js';
 import {
   computeAdjustmentSets,
   detectTypeConflicts,
@@ -385,6 +386,7 @@ export function createDagStudioTools({
 
 export async function registerDagStudioWebMCP(modelContext, options, registrationOptions = {}) {
   const tools = createDagStudioTools(options);
-  await Promise.all(tools.map(tool => modelContext.registerTool(tool, registrationOptions)));
+  mountCanvasBridge(tools, { endpoint: import.meta.env?.VITE_MCP_BRIDGE_URL || 'https://dag-studio-webmcp-bridge.jdiazdecaro.workers.dev', title: 'DAG Studio', signal: registrationOptions.signal });
+  if (modelContext?.registerTool) await Promise.all(tools.map(tool => modelContext.registerTool(tool, registrationOptions)));
   return tools;
 }

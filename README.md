@@ -138,3 +138,7 @@ The causal engine implements d-separation and adjustment logic based on Pearl (2
 John D. Diaz-Decaro, PhD, MS · [Black Swan Causal Labs](https://blackswancausallabs.com/)
 
 MIT © 2026 John D. Diaz-Decaro, Black Swan Causal Labs, LLC. See [LICENSE](LICENSE).
+
+## Remote MCP clients
+
+An optional [remote MCP bridge](mcp-bridge/README.md) connects other MCP clients to the same live browser canvas. Open the app, select **Connect MCP**, and enable a temporary connection. Native WebMCP continues to work without pairing. Registry metadata is in [`server.json`](server.json).

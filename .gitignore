@@ -16,3 +16,9 @@ MCP_REQUIREMENTS.md
 dag-studio-mcp/
 *-preprint*.docx
 ~$*.docx
+
+# MCP bridge local state and credentials
+**/.wrangler/
+**/.dev.vars*
+**/worker-configuration.d.ts
+.mcpregistry_*
