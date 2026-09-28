@@ -4,7 +4,7 @@
 
 > The AI proposes. The researcher decides. The engine verifies.
 
-[Live HTTPS sandbox](https://dag-studio-webmcp-sandbox.pages.dev/) · [Original DAG Studio](https://dagstudio.blackswancausallabs.com/) · [MIT License](LICENSE)
+[Live HTTPS sandbox](https://dag-studio-webmcp-sandbox.pages.dev/) · [Original DAG Studio](https://dagstudio.blackswancausallabs.com/) · [Apache 2.0 License](LICENSE)
 
 ## The problem
 
@@ -137,7 +137,12 @@ The causal engine implements d-separation and adjustment logic based on Pearl (2
 
 John D. Diaz-Decaro, PhD, MS · [Black Swan Causal Labs](https://blackswancausallabs.com/)
 
-MIT © 2026 John D. Diaz-Decaro, Black Swan Causal Labs, LLC. See [LICENSE](LICENSE).
+Apache License 2.0 © 2026 John D. Diaz-Decaro, Black Swan Causal Labs, LLC. See [LICENSE](LICENSE).
+
+The reused `dag-engine.js` and `dag-engine.d.ts` files originate in DAG Studio
+and are shared with [`dagstudio-mcp`](https://github.com/Black-Swan-Causal-Labs/dagstudio-mcp).
+All three projects distribute the engine under Apache License 2.0; the WebMCP
+Challenge work calls the engine without rewriting its causal algorithms.
 
 ## Remote MCP clients
 

@@ -1,3 +1,6 @@
+// Copyright 2026 John D. Diaz-Decaro, Black Swan Causal Labs, LLC
+// SPDX-License-Identifier: Apache-2.0
+//
 // DAG Studio analytical engine.
 //
 // Pure ESM module. No runtime dependencies. Lifted verbatim from index.html

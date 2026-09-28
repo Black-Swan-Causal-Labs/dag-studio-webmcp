@@ -1,3 +1,6 @@
+// Copyright 2026 John D. Diaz-Decaro, Black Swan Causal Labs, LLC
+// SPDX-License-Identifier: Apache-2.0
+//
 // Type declarations for dag-engine.js. Hand-authored — kept manually in sync
 // with the engine's exported surface. The engine itself stays plain JS so the
 // browser canvas can load it without a build step.

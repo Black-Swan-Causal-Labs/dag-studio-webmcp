@@ -4,7 +4,7 @@
   "private": true,
   "description": "Browser-based DAG editor with d-separation engine and training library for pharmacoepidemiology and real-world evidence research.",
   "author": "John D. Diaz-Decaro <john@blackswancausallabs.com>",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

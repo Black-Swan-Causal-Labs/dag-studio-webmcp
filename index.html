@@ -1,7 +1,7 @@
 <!--
   DAG Studio
   Copyright (c) 2026 John D. Diaz-Decaro, Black Swan Causal Labs, LLC
-  Licensed under MIT License - https://github.com/Black-Swan-Causal-Labs/dag-studio/blob/main/LICENSE
+  Licensed under the Apache License, Version 2.0 - https://github.com/Black-Swan-Causal-Labs/dag-studio/blob/main/LICENSE
   https://www.linkedin.com/in/jdiazdecaro/
 -->
 <!DOCTYPE html>
@@ -1513,7 +1513,7 @@ function AboutView() {
     { lead: "What it is.", body: "DAG Studio is a browser-based editor for causal directed acyclic graphs, built for epidemiologists, pharmacoepidemiologists, and real-world evidence researchers. It pairs an interactive canvas with a working causal inference engine, a bilingual Python and R console, synthetic-data simulation, and a training library, so you can draw a causal diagram, see what it implies for identification, and move between the canvas and your own code in either direction." },
     { lead: "Who it is for.", body: "On multidisciplinary teams, causal literacy varies across statisticians, clinicians, and regulatory scientists, and the tool is designed to meet each of them where they are: draw on the canvas and read the generated code, or paste your code and get the canvas back." },
     { lead: "What is inside.", body: "The identification engine enumerates backdoor paths and minimal sufficient adjustment sets using Pearl's d-separation rules, and its results are checked against canonical test cases under the Validation tab. The AI DAG Assistant turns a plain-language research question into a starting diagram. The Education Library collects canonical DAG archetypes with primary references, and the simulation tools generate synthetic data consistent with your graph for teaching and testing." },
-    { lead: "Provenance and status.", body: "DAG Studio is a prototype from Black Swan Causal Labs, released under the MIT license and under active development. It is designed to produce the kind of causal-diagram artifact described in FDA's draft guidance on non-interventional studies for real-world evidence, but it does not claim to satisfy or guarantee compliance with any regulatory expectation. A preprint describing the methodology in full is in preparation." }
+    { lead: "Provenance and status.", body: "DAG Studio is a prototype from Black Swan Causal Labs, released under the Apache License 2.0 and under active development. It is designed to produce the kind of causal-diagram artifact described in FDA's draft guidance on non-interventional studies for real-world evidence, but it does not claim to satisfy or guarantee compliance with any regulatory expectation. A preprint describing the methodology in full is in preparation." }
   ];
   return /*#__PURE__*/React.createElement("div", {
     className: "validation-container",
@@ -1541,7 +1541,7 @@ function FAQView() {
     { q: "Can I trust the DAGs the AI DAG Assistant produces?", a: "Treat them as first drafts, not validated causal models. The assistant proposes a starting structure from your question, but whether that structure faithfully encodes the science is your judgment. The results DAG Studio computes are exactly correct for whatever graph sits on the canvas, so review every node and edge before relying on them." },
     { q: "Can I use DAG Studio for a regulatory submission?", a: "DAG Studio is designed to produce the kind of causal-diagram artifact described in FDA's draft guidance on non-interventional studies, and to support the analyses around it. It does not claim to satisfy or guarantee compliance with any regulatory expectation. The guidance is non-binding and still in draft, and tool-based approaches have inherent limits, so use it as an aid to your methodology, not a substitute for it." },
     { q: "Do I need to install anything?", a: "No. DAG Studio runs in the browser. Python executes in a sandboxed in-browser runtime that downloads once on first use and is cached afterward; R diagram code is parsed instantly with no runtime download." },
-    { q: "Is it free and open source?", a: "Yes. DAG Studio is released under the MIT license by Black Swan Causal Labs, and is an actively developed prototype. Feedback is welcome." }
+    { q: "Is it free and open source?", a: "Yes. DAG Studio is released under the Apache License 2.0 by Black Swan Causal Labs, and is an actively developed prototype. Feedback is welcome." }
   ];
   return /*#__PURE__*/React.createElement("div", {
     className: "validation-container",
