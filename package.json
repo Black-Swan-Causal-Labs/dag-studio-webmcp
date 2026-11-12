@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test dag-engine.test.js webmcp-tools.test.js"
+    "test": "node --test dag-engine.test.js webmcp-tools.test.js ai-proxy/worker.test.js"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",

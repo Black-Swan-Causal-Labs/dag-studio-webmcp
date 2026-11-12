@@ -19,3 +19,13 @@ compatibility_date = "2026-07-01"
 # routes = [
 #   { pattern = "dag-studio-ai.blackswancausallabs.com", custom_domain = true }
 # ]
+
+# Per-IP throttle enforced in worker.js (env.RATE_LIMIT). `namespace_id` is any
+# integer unique within your Cloudflare account; `period` must be 10 or 60.
+[[ratelimits]]
+name = "RATE_LIMIT"
+namespace_id = "2001"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60

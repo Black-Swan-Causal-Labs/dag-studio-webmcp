@@ -12,10 +12,13 @@ browser  --(research question, no key)-->  this Worker  --(adds your key)-->  Ge
    |----------------- { text: "<dagitty DAG>" } response -----------------------|
 ```
 
-The Worker is a generic `{prompt}` -> `{text}` pass-through. The DAG Studio
-frontend composes the full prompt (the strict system instructions plus the
-dagitty output format) and parses the returned dagitty. The Worker itself knows
-nothing about DAGs, which keeps it small and unchanging.
+The Worker is single-purpose. The browser sends only `{question}`; the Worker
+composes the instructions (`SYSTEM_INSTRUCTIONS` in `worker.js`), calls Gemini,
+and returns `{text}` containing just the dagitty graph and an optional
+`CONFOUNDERS:` line. It is deliberately not a generic prompt relay: a caller
+cannot supply its own instructions, and a reply without a graph is not returned.
+
+To change how the assistant builds DAGs, edit `SYSTEM_INSTRUCTIONS` and redeploy.
 
 ## One-time deploy
 
@@ -34,7 +37,7 @@ Node installed.
    ```
    Paste a **new** free-tier key when prompted (separate from the SPIFD2 key so
    the quotas do not overlap). Use a key with billing disabled.
-3. Deploy:
+3. Deploy (re-run this after any change to `worker.js` or `wrangler.toml`):
    ```
    wrangler deploy
    ```
@@ -57,26 +60,39 @@ research-assistant works with no key, routed through the Worker.
 
 ## Origin lock
 
-`ALLOWED_ORIGINS` in `worker.js` is set to the live editor origin
-`https://black-swan-causal-labs.github.io` plus `localhost:5173` / `localhost:4173`
-for `npm run dev` / `npm run preview`. If you move DAG Studio to a custom domain,
-add that origin here and redeploy. For production-only hardening, remove the
-localhost entries.
+`ALLOWED_ORIGINS` in `worker.js` lists the pages allowed to call the Worker from
+a browser: the production editor, its github.io fallback, the WebMCP sandbox,
+and `localhost:5173` / `localhost:4173` for `npm run dev` / `npm run preview`.
+Add any new host here and redeploy.
 
-## Recommended: rate limiting
+The `Origin` header only constrains browsers. A script can send any value, so
+the guardrails below do not rely on it.
 
-The Origin check keeps casual abuse out, but the simplest robust throttle is a
-Cloudflare dashboard Rate Limiting rule on the Worker route (no code):
-Security -> WAF -> Rate limiting rules. Cap requests per IP per minute.
+## Guardrails in the Worker
 
-## Guardrails already in the Worker
+- **No free-form prompt.** Only the research question is taken from the request
+  (capped at `MAX_QUESTION_CHARS`); instructions are composed server-side.
+- **No free-form output.** Only a dagitty graph and the `CONFOUNDERS:` line are
+  returned; anything else the model writes is dropped, and a reply with no graph
+  is an error.
+- **Per-IP rate limit.** The `RATE_LIMIT` binding in `wrangler.toml` allows 10
+  requests per minute per client IP. Adjust `limit` there and redeploy.
+- **Pinned model, temperature and output ceiling**, so the key cannot be pointed
+  at an expensive model.
+- **Key in a request header**, never in a URL, and upstream error text is not
+  relayed to the browser.
 
-- Only accepts POST requests whose `Origin` is in `ALLOWED_ORIGINS`.
-- Pins the model server-side (`MODEL`) so the key cannot be pointed at an
-  expensive model.
-- Pins temperature and output-token ceiling server-side.
-- Caps prompt size (`MAX_PROMPT_CHARS`).
-- Never returns the key or raw upstream internals to the browser.
+Use a free-tier key with billing disabled as the final backstop: the worst case
+is then an exhausted daily quota, not a bill.
+
+## Tests
+
+```
+node --test ai-proxy/worker.test.js
+```
+
+Runs the Worker against a stubbed Gemini upstream (no network, no key) and
+checks each guardrail above.
 
 ## Privacy note
 

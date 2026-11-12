@@ -609,9 +609,10 @@ import { registerDagStudioWebMCP } from './webmcp-tools.js';
 import dagre from '@dagrejs/dagre';
 
 // ─── AI research assistant (research question → causal DAG) ───────────────────
-// Keyless when served online: the browser posts the question to the origin-locked
-// Cloudflare Worker (dag-studio-ai-proxy), which holds the Gemini key server-side
-// and returns text. The key never touches this file. See ai-proxy/README.md.
+// Keyless when served online: the browser posts the question to the Cloudflare
+// Worker (dag-studio-ai-proxy), which holds the Gemini key server-side, composes
+// the instructions, and returns a dagitty graph. The key never touches this
+// file. See ai-proxy/README.md.
 // Set AI_PROXY_URL = '' to hide the Assistant tab entirely.
 const AI_PROXY_URL = 'https://dag-studio-ai-proxy.jdiazdecaro.workers.dev';
 const aiEnabled = () => !!AI_PROXY_URL;
@@ -663,12 +664,17 @@ const extractConfounders = (text) => {
   return (!v || /^none\.?$/i.test(v)) ? '' : v;
 };
 
-// Call the proxy: POST {prompt} -> {text}. Mirrors the SPIFD2 proxy contract.
-const callAI = (prompt) =>
+// Call the proxy: POST {question} -> {text}. The Worker composes the
+// instructions itself and returns only a dagitty graph (see ai-proxy/worker.js),
+// so it cannot be used as a general-purpose prompt relay.
+// `prompt` is sent alongside only so a not-yet-redeployed Worker (which reads
+// `prompt`) keeps working; the current Worker ignores it. Remove `prompt` and
+// buildDagPrompt once the Worker has been redeployed.
+const callAI = (question) =>
   fetch(AI_PROXY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ question, prompt: buildDagPrompt(question) }),
   }).then(async (r) => {
     const raw = await r.text();
     let d = null; try { d = JSON.parse(raw); } catch (_) {}
@@ -2515,7 +2521,7 @@ function DAGStudio() {
       setRuntimeBusy(true);
       setConsoleOutput('Thinking… building a causal DAG from your question.');
       try {
-        const reply = await callAI(buildDagPrompt(question));
+        const reply = await callAI(question);
         const dsl = extractDagitty(reply);
         if (!dsl) throw new Error('The assistant did not return a DAG. Try rephrasing the question.');
         // Route through the same parseDagitty + reconcileDagFromCode pipe the R
