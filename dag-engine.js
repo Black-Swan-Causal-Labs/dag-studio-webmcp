@@ -14,7 +14,7 @@
 //   - index.html (browser canvas)
 //   - dag-engine.test.js (Node validation suite)
 
-export const ENGINE_SEMVER = '0.2.0';
+export const ENGINE_SEMVER = '0.3.0';
 
 // ─── Graph traversal ────────────────────────────────────────────────────────
 
@@ -100,95 +100,169 @@ export function pathBlocked(path, Z, edges) {
 // active trail connects them. O(V+E) per query — no path enumeration, so it
 // stays exact on graphs where enumeratePaths() would truncate.
 export function dSeparated(x, y, Z, edges) {
-  const Zset = new Set(Z);
+  return makeDSeparator(edges)(x, y, Z);
+}
+
+// Builds the adjacency once and returns a (x, y, Z) => boolean tester, for
+// callers that run many queries against the same graph.
+export function makeDSeparator(edges) {
   const parents = {};
   const children = {};
   for (const e of edges) {
     (children[e.src] = children[e.src] || []).push(e.tgt);
     (parents[e.tgt] = parents[e.tgt] || []).push(e.src);
   }
-  // Ancestors of Z (including Z itself): the set that activates colliders.
-  const anc = new Set(Zset);
-  const aq = [...Zset];
-  while (aq.length) {
-    const cur = aq.pop();
-    for (const p of parents[cur] || []) if (!anc.has(p)) { anc.add(p); aq.push(p); }
-  }
-  // Walk (node, direction) states. 'up' = arrived from a child (against an
-  // edge); 'down' = arrived from a parent (along an edge). x starts as if
-  // reached from a virtual child so both directions are explored.
-  const seen = new Set();
-  const stack = [x + '|up'];
-  while (stack.length) {
-    const state = stack.pop();
-    if (seen.has(state)) continue;
-    seen.add(state);
-    const sep = state.lastIndexOf('|');
-    const node = state.slice(0, sep);
-    const dir = state.slice(sep + 1);
-    if (dir === 'up') {
-      if (Zset.has(node)) continue;            // chain/fork blocked at Z
-      if (node === y) return false;            // active trail reaches y
-      for (const p of parents[node] || []) stack.push(p + '|up');
-      for (const c of children[node] || []) stack.push(c + '|down');
-    } else {
-      if (!Zset.has(node)) {
-        if (node === y) return false;
-        for (const c of children[node] || []) stack.push(c + '|down');
-      }
-      // v-structure: parent → node ← parent passes iff node ∈ ancestors(Z)∪Z
-      if (anc.has(node)) {
-        for (const p of parents[node] || []) stack.push(p + '|up');
+  const NONE = [];
+  return (x, y, Z) => {
+    const Zset = new Set(Z);
+    // Ancestors of Z (including Z itself): the set that activates colliders.
+    const anc = new Set(Zset);
+    const aq = [...Zset];
+    while (aq.length) {
+      const cur = aq.pop();
+      for (const p of parents[cur] || NONE) if (!anc.has(p)) { anc.add(p); aq.push(p); }
+    }
+    // Walk (node, direction) states. 'up' = arrived from a child (against an
+    // edge); 'down' = arrived from a parent (along an edge). x starts as if
+    // reached from a virtual child so both directions are explored.
+    const seenUp = new Set();
+    const seenDown = new Set();
+    const stack = [x, true];
+    while (stack.length) {
+      const up = stack.pop();
+      const node = stack.pop();
+      const seen = up ? seenUp : seenDown;
+      if (seen.has(node)) continue;
+      seen.add(node);
+      if (up) {
+        if (Zset.has(node)) continue;            // chain/fork blocked at Z
+        if (node === y) return false;            // active trail reaches y
+        for (const p of parents[node] || NONE) stack.push(p, true);
+        for (const c of children[node] || NONE) stack.push(c, false);
+      } else {
+        if (!Zset.has(node)) {
+          if (node === y) return false;
+          for (const c of children[node] || NONE) stack.push(c, false);
+        }
+        // v-structure: parent → node ← parent passes iff node ∈ ancestors(Z)∪Z
+        if (anc.has(node)) {
+          for (const p of parents[node] || NONE) stack.push(p, true);
+        }
       }
     }
-  }
-  return true;
+    return true;
+  };
 }
 
 export function backdoorPaths(exp, out, edges) {
   return allPaths(exp, out, edges).filter(path => path.length >= 2 && edges.some(e => e.src === path[1] && e.tgt === exp) && !pathBlocked(path, [], edges));
 }
 
+// Largest candidate pool for which every subset is enumerated (2^n exact
+// d-separation tests). Above this, existence is still decided exactly and at
+// least one minimal set is returned; only the *listing* may be incomplete.
+export const ADJUSTMENT_ENUM_CAP = 15;
+
 export function computeAdjustmentSets(exp, out, nodes, edges) {
   if (!exp || !out) return null;
   const desc = descendants(exp, edges);
-  const allCands = nodes.filter(n => n.id !== exp && n.id !== out && !desc.has(n.id) && n.type !== 'latent').map(n => n.id);
-  // Subset enumeration is 2^candidates, so the candidate list is capped — but
-  // unlike the old silent slice(0, 10), the cap is reported via `truncated`.
-  const CAND_CAP = 12;
-  const cands = allCands.slice(0, CAND_CAP);
   const { paths: aPaths, truncated: pathsTruncated } = enumeratePaths(exp, out, edges);
   const bkPaths = aPaths.filter(p =>
     p.length >= 2 && edges.some(e => e.src === p[1] && e.tgt === exp) && !pathBlocked(p, [], edges));
-  const truncated = { candidates: allCands.length > cands.length, paths: pathsTruncated };
   // Backdoor criterion via d-separation on the graph with the exposure's
   // outgoing edges removed (Pearl 2009 §3.3): Z is valid iff X ⊥ Y | Z there.
-  // Candidates already exclude descendants of the exposure. This is exact and
-  // polynomial per set — independent of the (bounded) path lists above — and,
-  // unlike the old per-enumerated-path check, it also rejects sets that OPEN
-  // a collider path while closing another.
+  // Candidates exclude descendants of the exposure. This is exact and
+  // polynomial per set — independent of the (bounded) path lists above — and
+  // it also rejects sets that OPEN a collider path while closing another.
   const backdoorEdges = edges.filter(e => e.src !== exp);
-  const isValid = Z => dSeparated(exp, out, Z, backdoorEdges);
-  if (isValid([])) return {
-    sets: [[]],
+  const separated = makeDSeparator(backdoorEdges);
+  const isValid = Z => separated(exp, out, Z);
+  const done = (sets, candidates) => ({
+    sets,
     backdoor: bkPaths,
     all: aPaths,
-    truncated
-  };
-  const valid = [];
-  for (let mask = 0; mask < 1 << cands.length; mask++) {
-    const Z = cands.filter((_, i) => mask & 1 << i);
-    if (isValid(Z)) valid.push(Z);
-  }
-  const minimal = valid.filter(s => {
-    const sSet = new Set(s);
-    return !valid.some(o => o.length < s.length && o.every(x => sSet.has(x)));
+    truncated: { candidates, paths: pathsTruncated }
   });
+  if (isValid([])) return done([[]], false);
+
+  // Every minimal d-separator of X and Y lies inside An(X ∪ Y), and if any
+  // separator drawn from a permitted set R exists then An(X ∪ Y) ∩ R is one
+  // (Tian, Paz & Pearl 1998; van der Zander, Liśkiewicz & Textor 2014). So
+  // restricting candidates to backdoor-graph ancestors of the exposure or
+  // outcome loses no minimal set, and testing that one "canonical" set decides
+  // existence exactly — however many covariates the DAG has.
+  const parents = {};
+  for (const e of backdoorEdges) (parents[e.tgt] = parents[e.tgt] || []).push(e.src);
+  const anc = new Set();
+  const stack = [exp, out];
+  while (stack.length) {
+    const cur = stack.pop();
+    for (const p of parents[cur] || []) if (!anc.has(p)) { anc.add(p); stack.push(p); }
+  }
+  const cands = nodes
+    .filter(n => n.id !== exp && n.id !== out && !desc.has(n.id) && n.type !== 'latent' && anc.has(n.id))
+    .map(n => n.id);
+  if (!isValid(cands)) return done([], false);
+
+  if (cands.length <= ADJUSTMENT_ENUM_CAP) {
+    // covered[mask] = some valid set is a subset of mask. A valid set is
+    // minimal iff none of its one-smaller subsets is covered. Masks are
+    // visited in increasing numeric order, so every subset precedes its
+    // supersets and one pass suffices.
+    const k = cands.length;
+    const covered = new Uint8Array(1 << k);
+    const minimal = [];
+    for (let mask = 0; mask < 1 << k; mask++) {
+      let sub = false;
+      for (let i = 0; i < k && !sub; i++) if (mask & 1 << i && covered[mask ^ 1 << i]) sub = true;
+      if (sub) { covered[mask] = 1; continue; }
+      const Z = cands.filter((_, i) => mask & 1 << i);
+      if (isValid(Z)) { covered[mask] = 1; minimal.push(Z); }
+    }
+    return done(minimal, false);
+  }
+
+  // Too many candidates to enumerate every subset. Shrink the canonical set
+  // greedily under several removal orders; each result is a valid set from
+  // which no single variable can be dropped. The list is flagged incomplete.
+  const shrink = order => {
+    const keep = new Set(cands);
+    for (const c of order) {
+      keep.delete(c);
+      if (!isValid(cands.filter(x => keep.has(x)))) keep.add(c);
+    }
+    return cands.filter(x => keep.has(x));
+  };
+  const found = new Map();
+  const orders = [cands, [...cands].reverse()];
+  for (let i = 1; i < cands.length; i++) orders.push([...cands.slice(i), ...cands.slice(0, i)]);
+  for (const order of orders) {
+    const Z = shrink(order);
+    found.set(Z.join('\u0000'), Z);
+  }
+  return done([...found.values()], true);
+}
+
+// Validate a proposed adjustment set for the total effect of exp on out.
+// `blocksBackdoor` is the exact d-separation test on the backdoor graph;
+// `descendantsOfExposure` lists members that violate the backdoor criterion's
+// first condition (mediators, colliders downstream of the exposure, …).
+// `valid` requires both conditions. Latent members are reported because they
+// cannot be adjusted for in practice.
+export function checkAdjustmentSet(exp, out, Z, nodes, edges) {
+  const desc = descendants(exp, edges);
+  const latent = new Set(nodes.filter(n => n.type === 'latent').map(n => n.id));
+  const members = [...new Set(Z)];
+  const backdoorEdges = edges.filter(e => e.src !== exp);
+  const blocksBackdoor = dSeparated(exp, out, members.filter(z => z !== exp && z !== out), backdoorEdges);
+  const descendantsOfExposure = members.filter(z => desc.has(z));
+  const latentMembers = members.filter(z => latent.has(z));
+  const containsEndpoint = members.includes(exp) || members.includes(out);
   return {
-    sets: minimal,
-    backdoor: bkPaths,
-    all: aPaths,
-    truncated
+    valid: blocksBackdoor && descendantsOfExposure.length === 0 && !containsEndpoint,
+    blocksBackdoor,
+    descendantsOfExposure,
+    latentMembers
   };
 }
 
@@ -253,9 +327,18 @@ export function structuralRole(nodeId, exposure, outcome, edges) {
   const isDescOfExp = descE.has(nodeId);
   const isAncOfOut = descN.has(outcome);
   const isAncOfExp = descN.has(exposure);
+  // A common cause must reach the outcome by a route that does not pass
+  // through the exposure. An ancestor of the exposure whose only route to the
+  // outcome is via the exposure (Z → X → Y) is instrument-like, not a
+  // confounder — every ancestor of X is trivially an ancestor of Y once X → Y.
+  const fwdNoExp = {};
+  for (const e of edges) if (e.src !== exposure && e.tgt !== exposure) {
+    (fwdNoExp[e.src] = fwdNoExp[e.src] || []).push(e.tgt);
+  }
+  const reachesOutAvoidingExp = reach(nodeId, fwdNoExp).has(outcome);
   if (isDescOfExp && isAncOfOut) return 'mediator';
-  if (isAncOfExp && isAncOfOut) return 'confounder';
-  if (isAncOfExp && !isAncOfOut) return 'instrument';
+  if (isAncOfExp && reachesOutAvoidingExp) return 'confounder';
+  if (isAncOfExp) return 'instrument';
   if (isDescOfExp && !isAncOfOut) return 'descendant-of-exposure';
   if (isAncOfOut && !isAncOfExp && !isDescOfExp) return 'ancestor-of-outcome';
   return 'unrelated';
@@ -795,32 +878,121 @@ export function generateRCode(nodes, edges, exposure, outcome) {
 }
 
 // ─── dagitty DSL parser ─────────────────────────────────────────────────────
-// Pure-JS parser for the dagitty DSL (`dagitty('dag { X [exposure]; Y -> Z }')`).
-// We used to run real R via WebR, but WebR's `installPackages` reliably throws
-// an internal TypeError when fetching dagitty from r-wasm — not something we
-// can fix on our end. Since every realistic R workflow uses the same DSL
-// (the string passed to `dagitty()`), parsing it client-side covers the
-// actual use case with no 30 MB runtime download and no install step.
+// Pure-JS parser for the dagitty DSL. Accepts the R-wrapped form
+// (`dagitty('dag { … }')`, `dagitty::dagitty("…")`) and the bare graph
+// (`dag { … }`, as exported by dagitty.net or `cat(dag)`).
+//
+// Supported: node declarations with [exposure] / [outcome] / [latent]
+// attributes, quoted names ("Body Mass Index"), directed edges in either
+// direction, chains (A -> B -> C), node groups ({A B} -> {C D}), and
+// bidirected edges. `A <-> B` is dagitty shorthand for an unmeasured common
+// cause, so it becomes an explicit latent node with arrows into A and B.
+//
+// Anything the engine cannot represent faithfully — undirected edges, PAG
+// edge marks, unbalanced braces, stray tokens — throws. A statement is never
+// skipped silently: dropping an edge changes the causal claim and therefore
+// the adjustment sets. Constructs that parse but are not analyzed (e.g.
+// [adjusted]) are reported in `warnings`.
 export function parseDagitty(rCode) {
   if (!rCode || !rCode.trim()) throw new Error('No R code provided.');
-  // Find a dagitty("...") or dagitty::dagitty("...") call and extract the
-  // quoted DSL argument. Supports both single- and double-quoted strings.
-  const m = rCode.match(/(?:^|\W)(?:dagitty\s*::\s*)?dagitty\s*\(\s*(['"])([\s\S]*?)\1\s*\)/);
-  if (!m) {
+  const m = rCode.match(/(?:^|\W)(?:dagitty\s*::\s*)?dagitty\s*\(\s*(['"])((?:\\[\s\S]|(?!\1)[^\\])*)\1\s*\)/);
+  let dsl;
+  if (m) {
+    dsl = m[2].replace(/\\(['"\\])/g, '$1');
+  } else if (/^\s*(?:dag|mag|pdag|pag|digraph)\s*\{/.test(rCode)) {
+    dsl = rCode;
+  } else {
     throw new Error(
-      "Could not find a dagitty('…') or dagitty(\"…\") call in the R code. " +
-      "The R path parses the dagitty DSL; build your DAG via " +
-      "`dag <- dagitty('dag { X [exposure]; Y [outcome]; X -> Y }')`."
+      "Could not find a dagitty graph. Provide either the bare DSL " +
+      "(`dag { X [exposure]; Y [outcome]; X -> Y }`) or the R call " +
+      "(`dagitty('dag { X [exposure]; Y [outcome]; X -> Y }')`)."
     );
   }
-  let dsl = m[2];
-  // Strip comments, normalize whitespace around operators.
-  dsl = dsl.replace(/#[^\n]*/g, '');
-  // Strip wrapping `dag { ... }` / `mag { ... }` / `pdag { ... }` / `pag { ... }`.
-  dsl = dsl.replace(/^\s*(?:dag|mag|pdag|pag)\s*\{/, '').replace(/\}\s*$/, '');
+
+  // ── Tokenize ──
+  const tokens = [];
+  const ID_CHAR = /[\p{L}\p{N}_.]/u;
+  // `glued` marks a bare name that follows another bare name on the same line
+  // with only blanks between them — almost always an unquoted multi-word name
+  // (`Lung Cancer -> Death`), which would otherwise read as two nodes.
+  let blanksOnly = false;
+  for (let i = 0; i < dsl.length;) {
+    const ch = dsl[i];
+    if (ch === ' ' || ch === '\t') { i++; continue; }
+    if (/\s/.test(ch) || ch === ';' || ch === ',') { blanksOnly = false; i++; continue; }
+    if (!ID_CHAR.test(ch)) blanksOnly = false;
+    if (ch === '#' || (ch === '/' && dsl[i + 1] === '/')) {
+      while (i < dsl.length && dsl[i] !== '\n') i++;
+      continue;
+    }
+    if (ch === '{' || ch === '}') { tokens.push({ t: ch }); i++; continue; }
+    if (ch === '=' && tokens[tokens.length - 1]?.t === 'id') {
+      // Graph-level attribute such as `bb="0,0,1,1"` (dagitty.net exports
+      // one). It carries layout only, so drop the key and skip the value.
+      tokens.pop();
+      i++;
+      while (i < dsl.length && /[ \t]/.test(dsl[i])) i++;
+      if (dsl[i] === '"') {
+        const j = dsl.indexOf('"', i + 1);
+        if (j < 0) throw new Error('Unclosed quoted attribute value in the dagitty DSL.');
+        i = j + 1;
+      } else {
+        while (i < dsl.length && !/[\s;{}\[\]]/.test(dsl[i])) i++;
+      }
+      continue;
+    }
+    if (ch === '[') {
+      let j = i + 1, quote = null;
+      for (; j < dsl.length; j++) {
+        if (quote) { if (dsl[j] === quote) quote = null; }
+        else if (dsl[j] === '"') quote = '"';
+        else if (dsl[j] === ']') break;
+      }
+      if (j >= dsl.length) throw new Error('Unclosed "[" in the dagitty DSL.');
+      tokens.push({ t: 'attr', v: dsl.slice(i + 1, j) });
+      i = j + 1;
+      continue;
+    }
+    if (ch === '"') {
+      const j = dsl.indexOf('"', i + 1);
+      if (j < 0) throw new Error('Unclosed quoted node name in the dagitty DSL.');
+      const name = dsl.slice(i + 1, j).trim();
+      if (!name) throw new Error('Empty quoted node name in the dagitty DSL.');
+      tokens.push({ t: 'id', v: name });
+      i = j + 1;
+      continue;
+    }
+    const op = /^(<->|->|<-|--|@->|<-@|@-@|@--|--@)/.exec(dsl.slice(i, i + 3));
+    if (op) { tokens.push({ t: 'op', v: op[1] }); i += op[1].length; continue; }
+    if (ID_CHAR.test(ch)) {
+      let j = i;
+      while (j < dsl.length && ID_CHAR.test(dsl[j])) j++;
+      tokens.push({ t: 'id', v: dsl.slice(i, j), glued: blanksOnly });
+      blanksOnly = true;
+      i = j;
+      continue;
+    }
+    throw new Error(
+      `Unexpected character "${ch}" in the dagitty DSL near "${dsl.slice(Math.max(0, i - 15), i + 15).trim()}".`
+    );
+  }
+
+  // ── Header: `dag {` … `}` ──
+  let pos = 0;
+  if (tokens[pos]?.t === 'id' && tokens[pos + 1]?.t === '{') {
+    const kind = tokens[pos].v.toLowerCase();
+    if (!['dag', 'digraph', 'mag', 'pdag', 'pag'].includes(kind)) {
+      throw new Error(`Unsupported graph type "${tokens[pos].v}"; expected dag { … }.`);
+    }
+    if (tokens[tokens.length - 1]?.t !== '}') throw new Error('The dagitty DSL is missing its closing "}".');
+    tokens.pop();
+    pos = 2;
+  }
 
   const nodeMap = new Map();
   const edges = [];
+  const edgeKeys = new Set();
+  const warnings = [];
   // role is null for bare declarations so reconcileDagFromCode falls back to
   // the existing canvas type (confounder, unclassified, etc.) — the dagitty
   // DSL only encodes exposure/outcome/latent, so a bare `Age` shouldn't
@@ -829,55 +1001,116 @@ export function parseDagitty(rCode) {
     if (!nodeMap.has(id)) nodeMap.set(id, { id, label: id, role: null });
     return nodeMap.get(id);
   };
+  const addEdge = (src, tgt) => {
+    if (src === tgt) throw new Error(`Self-loop "${src} -> ${src}" is not allowed in a DAG.`);
+    const key = src + '\u0000' + tgt;
+    if (edgeKeys.has(key)) return;
+    edgeKeys.add(key);
+    edges.push({ src, tgt });
+  };
+  const exposures = [], outcomes = [], adjusted = [];
+  const applyAttrs = (id, text) => {
+    const n = getNode(id);
+    const keys = text.split(',').map(r => r.trim().split('=')[0].trim().toLowerCase());
+    if (keys.includes('exposure')) { n.role = 'exposure'; if (!exposures.includes(id)) exposures.push(id); }
+    else if (keys.includes('outcome')) { n.role = 'outcome'; if (!outcomes.includes(id)) outcomes.push(id); }
+    else if (keys.includes('latent') || keys.includes('unobserved')) n.role = 'latent';
+    if ((keys.includes('adjusted') || keys.includes('selected')) && !adjusted.includes(id)) adjusted.push(id);
+  };
 
-  // Statements can be separated by newlines or semicolons.
-  const stmts = dsl.split(/[\n;]+/).map(s => s.trim()).filter(Boolean);
-  const idRe = /[A-Za-z_][A-Za-z0-9_.]*/;
-  const opRe = /->|<->|<-|--/;
-
-  for (const stmt of stmts) {
-    // Edge (possibly chained: A -> B -> C): split by operator.
-    if (opRe.test(stmt)) {
-      const parts = stmt.split(/\s*(->|<->|<-|--)\s*/);
-      // Validate that every other token is an identifier.
-      let valid = parts.length >= 3;
-      for (let i = 0; valid && i < parts.length; i += 2) {
-        if (!new RegExp('^' + idRe.source + '$').test(parts[i])) valid = false;
+  // An operand is one node or a `{A B C}` group of nodes.
+  const readOperand = () => {
+    const tok = tokens[pos];
+    if (tok?.t === 'id') { pos++; getNode(tok.v); return [tok.v]; }
+    if (tok?.t === '{') {
+      pos++;
+      const ids = [];
+      while (tokens[pos] && tokens[pos].t !== '}') {
+        const inner = tokens[pos];
+        if (inner.t === 'id') { getNode(inner.v); ids.push(inner.v); pos++; }
+        else if (inner.t === 'attr' && ids.length) { applyAttrs(ids[ids.length - 1], inner.v); pos++; }
+        else throw new Error('Only node names may appear inside a { … } group in the dagitty DSL.');
       }
-      if (valid) {
-        for (let i = 0; i < parts.length - 2; i += 2) {
-          const left = parts[i], op = parts[i + 1], right = parts[i + 2];
-          getNode(left); getNode(right);
-          if (op === '->') edges.push({ src: left, tgt: right });
-          else if (op === '<-') edges.push({ src: right, tgt: left });
-          // '<->' and '--' are non-directed; we skip them since the canvas
-          // only represents directed edges. (A bidirected edge implies an
-          // unobserved common cause — users should model it explicitly.)
+      if (!tokens[pos]) throw new Error('Unclosed "{" group in the dagitty DSL.');
+      pos++;
+      if (!ids.length) throw new Error('Empty { } group in the dagitty DSL.');
+      return ids;
+    }
+    return null;
+  };
+
+  // Attribute lists directly after a node are applied to it wherever they
+  // appear (`X [exposure] -> Y [outcome]` is common in hand-written DSL).
+  // applyAttrs only acts on node keywords, so edge attributes such as
+  // `X -> Y [beta=0.5]` fall through untouched.
+  const readOperandWithAttrs = () => {
+    const ids = readOperand();
+    if (!ids) return null;
+    while (tokens[pos]?.t === 'attr') {
+      if (ids.length === 1) applyAttrs(ids[0], tokens[pos].v);
+      pos++;
+    }
+    return ids;
+  };
+
+  let latentCount = 0;
+  while (pos < tokens.length) {
+    const start = tokens[pos];
+    if (start.t === 'id' && start.glued) {
+      const prev = tokens[pos - 1].v;
+      throw new Error(
+        `"${prev} ${start.v}" looks like a node name containing a space. Quote it ("${prev} ${start.v}") ` +
+        `or join it (${prev}_${start.v}); to declare two separate nodes, put them on separate lines or separate them with ";".`
+      );
+    }
+    let left = readOperandWithAttrs();
+    if (!left) {
+      const shown = start.t === 'op' ? start.v : start.t === 'attr' ? `[${start.v}]` : start.t;
+      throw new Error(`Unexpected "${shown}" in the dagitty DSL; expected a node name.`);
+    }
+    while (tokens[pos]?.t === 'op') {
+      const op = tokens[pos++].v;
+      const right = readOperandWithAttrs();
+      if (!right) throw new Error(`Edge "${left.join(' ')} ${op}" in the dagitty DSL has no target node.`);
+      for (const a of left) for (const b of right) {
+        if (op === '->') addEdge(a, b);
+        else if (op === '<-') addEdge(b, a);
+        else if (op === '<->') {
+          // Bidirected edge = unmeasured common cause. Make it explicit.
+          let id;
+          do { id = `U_${++latentCount}`; } while (nodeMap.has(id));
+          const u = getNode(id);
+          u.role = 'latent';
+          u.label = `U (${a}, ${b})`;
+          addEdge(id, a);
+          addEdge(id, b);
+          warnings.push(
+            `Bidirected edge "${a} <-> ${b}" was converted to an explicit latent common cause "${id}" (${id} -> ${a}, ${id} -> ${b}).`
+          );
+        } else if (op === '--') {
+          throw new Error(
+            `Undirected edge "${a} -- ${b}" cannot be represented in a DAG. Give it a direction, or use <-> for an unmeasured common cause.`
+          );
+        } else {
+          throw new Error(`Edge type "${op}" (PAG/MAG edge mark) is not supported; DAG Studio analyzes DAGs only.`);
         }
-        continue;
       }
+      left = right;
     }
-    // Node declaration with roles: `IDENT [exposure,outcome,latent,...]`.
-    const decl = stmt.match(new RegExp('^(' + idRe.source + ')\\s*\\[([^\\]]*)\\]'));
-    if (decl) {
-      const n = getNode(decl[1]);
-      const roles = decl[2].split(',').map(r => r.trim().toLowerCase());
-      if (roles.includes('exposure')) n.role = 'exposure';
-      else if (roles.includes('outcome')) n.role = 'outcome';
-      else if (roles.includes('latent') || roles.includes('unobserved')) n.role = 'latent';
-      continue;
-    }
-    // Bare identifier: declares the node with default role.
-    const bare = stmt.match(new RegExp('^(' + idRe.source + ')$'));
-    if (bare) { getNode(bare[1]); continue; }
-    // Anything else (pos="x,y" annotations on declarations, etc.) is ignored.
   }
 
   const nodeList = [...nodeMap.values()];
-  const exposure = (nodeList.find(n => n.role === 'exposure') || {}).id || null;
-  const outcome  = (nodeList.find(n => n.role === 'outcome')  || {}).id || null;
   if (!nodeList.length) throw new Error('The dagitty DSL defined no nodes.');
-  return { nodes: nodeList, edges, exposure, outcome };
+  if (exposures.length > 1) warnings.push(`Multiple exposures declared (${exposures.join(', ')}); only "${exposures[0]}" is used.`);
+  if (outcomes.length > 1) warnings.push(`Multiple outcomes declared (${outcomes.join(', ')}); only "${outcomes[0]}" is used.`);
+  if (adjusted.length) warnings.push(`[adjusted]/[selected] on ${adjusted.join(', ')} is not applied: the analysis does not condition on these nodes.`);
+  return {
+    nodes: nodeList,
+    edges,
+    exposure: exposures[0] || null,
+    outcome: outcomes[0] || null,
+    warnings
+  };
 }
 
 // ─── Validation Suite (T01–T15) ─────────────────────────────────────────────

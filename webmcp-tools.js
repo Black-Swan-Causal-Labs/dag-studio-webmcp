@@ -1,8 +1,8 @@
 import { mountCanvasBridge } from './mcp-bridge/browser.js';
 import {
+  checkAdjustmentSet,
   computeAdjustmentSets,
   detectTypeConflicts,
-  dSeparated,
   computeCorrelation,
   computeOLSCoefficients,
   computeTrueEffect,
@@ -222,6 +222,9 @@ export function createDagStudioTools({
           identifiable: Boolean(result) && result.sets.length > 0,
           open_backdoor_paths: result?.backdoor || [],
           minimal_sufficient_adjustment_sets: result?.sets || [],
+          // True when the DAG has too many eligible covariates to list every
+          // minimal set; identifiability itself is still exact.
+          adjustment_sets_list_incomplete: Boolean(result?.truncated?.candidates),
           diagnostics: conflicts,
           caveat: 'The engine verifies implications of the encoded assumptions; the researcher decides whether those assumptions are scientifically defensible.',
         });
@@ -229,16 +232,22 @@ export function createDagStudioTools({
     },
     {
       name: 'check_adjustment_set',
-      description: 'Check whether proposed node ids block every encoded backdoor path without deciding whether adjustment is scientifically appropriate.',
+      description: 'Check whether proposed node ids form a valid adjustment set for the total effect: they must block every encoded backdoor path and contain no descendant of the exposure (such as a mediator). Does not decide whether adjustment is scientifically appropriate.',
       inputSchema: schema({ adjustment_set: { type: 'array', items: { type: 'string' } } }, ['adjustment_set']),
       annotations: { readOnlyHint: true },
       execute: ({ adjustment_set }) => {
         const dag = currentDag();
         adjustment_set.forEach(ensureNode);
         if (!dag.exposure || !dag.outcome) throw new Error('Set both exposure and outcome first.');
-        const backdoorGraph = dag.edges.filter(edge => edge.src !== dag.exposure);
+        if (adjustment_set.includes(dag.exposure) || adjustment_set.includes(dag.outcome)) {
+          throw new Error('The adjustment set must not contain the exposure or the outcome.');
+        }
+        const check = checkAdjustmentSet(dag.exposure, dag.outcome, adjustment_set, dag.nodes, dag.edges);
         return textResult({
-          valid: dSeparated(dag.exposure, dag.outcome, adjustment_set, backdoorGraph),
+          valid: check.valid,
+          blocks_all_backdoor_paths: check.blocksBackdoor,
+          descendants_of_exposure: check.descendantsOfExposure,
+          latent_members: check.latentMembers,
           adjustment_set,
           caveat: 'Graphical validity is conditional on the encoded DAG and is not a measurement or feasibility judgment.',
         });

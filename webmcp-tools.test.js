@@ -163,6 +163,23 @@ test('analysis, adjustment checking, and code generation use the existing engine
   assert.ok(analysis.open_backdoor_paths.length > 0);
   assert.ok(analysis.minimal_sufficient_adjustment_sets.some(set => set.includes('c')));
   assert.equal(parsed(await tools.check_adjustment_set.execute({ adjustment_set: ['c'] })).valid, true);
+  // The empty set leaves the confounding path open.
+  const empty = parsed(await tools.check_adjustment_set.execute({ adjustment_set: [] }));
+  assert.equal(empty.valid, false);
+  assert.equal(empty.blocks_all_backdoor_paths, false);
   assert.match(parsed(await tools.generate_analysis_code.execute({ language: 'python' })).code, /networkx/);
   assert.match(parsed(await tools.generate_analysis_code.execute({ language: 'r' })).code, /dagitty/);
+});
+
+test('check_adjustment_set rejects a mediator even though it blocks every backdoor path', async () => {
+  const state = harness();
+  const tools = byName(createDagStudioTools(state.options));
+  parsed(await tools.add_node.execute({ id: 'm', label: 'Mediator' }));
+  parsed(await tools.add_edge.execute({ source: 'x', target: 'm' }));
+  parsed(await tools.add_edge.execute({ source: 'm', target: 'y' }));
+  const result = parsed(await tools.check_adjustment_set.execute({ adjustment_set: ['c', 'm'] }));
+  assert.equal(result.blocks_all_backdoor_paths, true);
+  assert.deepEqual(result.descendants_of_exposure, ['m']);
+  assert.equal(result.valid, false);
+  assert.throws(() => tools.check_adjustment_set.execute({ adjustment_set: ['x'] }), /exposure or the outcome/);
 });

@@ -628,7 +628,7 @@ STRICT RULES:
 - Add only variables that are causally justified for THIS question: established confounders, mediators on the causal path, and relevant colliders. Prefer well-established domain variables over speculation.
 - Every variable you declare MUST participate in at least one directed edge. Never output an isolated node with no arrows.
 - If the question names variables the researchers adjusted for, controlled for, matched on, or "accounted for", include EACH one and connect it by its causal role. Default each to a confounder, drawing an edge from it into BOTH the exposure and the outcome, unless it is clearly a mediator (it lies on the exposure->outcome path) or a collider (a shared effect of the exposure and the outcome). Draw the causal structure, not the analysis plan: represent what causes what, and let the identification tooling decide what to adjust for. Do not drop any named variable and do not leave any unconnected. For example, for "the effect of X on Y, accounting for A, B, and C", emit A -> X, A -> Y, B -> X, B -> Y, C -> X, C -> Y (unless one is genuinely a mediator or collider); never leave A, B, or C as a bare declaration.
-- Use short, readable node labels (letters, digits, spaces only). Draw directed edges with -> only.
+- Use short, readable node labels made of letters and digits only, with no spaces (write LungCancer, not Lung Cancer). Draw directed edges with -> only.
 - Do NOT simulate data, cite literature, fetch anything, or add commentary inside the graph.
 
 OUTPUT EXACTLY these two parts and nothing else:
@@ -2590,10 +2590,15 @@ function DAGStudio() {
         const dag = parseDagitty(code);
         const res = reconcileDagFromCode(dag, 'r');
         setConsoleErr(false);
+        // Surface anything the parser rewrote (e.g. `A <-> B` → explicit
+        // latent common cause) so the canvas never differs from the code silently.
+        const notes = res.applied && dag.warnings && dag.warnings.length
+          ? '\nNote: ' + dag.warnings.join('\nNote: ')
+          : '';
         setConsoleOutput(
-          res.applied
+          (res.applied
             ? `Applied ${res.nodes} nodes and ${res.edges} edges to canvas. Canvas modifiers cleared.`
-            : (res.reason || 'Could not apply DAG.')
+            : (res.reason || 'Could not apply DAG.')) + notes
         );
       } catch (err) {
         setConsoleErr(true);

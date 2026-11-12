@@ -39,7 +39,21 @@ export interface AdjustmentSetsResult {
   sets: string[][];
   backdoor: string[][];
   all: string[][];
+  /**
+   * `candidates`: too many eligible covariates to enumerate every subset.
+   * `sets` is then a non-exhaustive list of minimal sets, but it is still
+   * non-empty exactly when a valid adjustment set exists. `paths`: the
+   * displayed path lists hit their budget (set validity is unaffected).
+   */
   truncated: { candidates: boolean; paths: boolean };
+}
+
+export interface AdjustmentSetCheck {
+  /** Blocks every backdoor path AND contains no descendant of the exposure. */
+  valid: boolean;
+  blocksBackdoor: boolean;
+  descendantsOfExposure: string[];
+  latentMembers: string[];
 }
 
 export interface EnumeratePathsResult {
@@ -121,6 +135,8 @@ export interface ParsedDagitty {
   edges: Array<{ src: string; tgt: string }>;
   exposure: string | null;
   outcome: string | null;
+  /** Constructs that were rewritten (e.g. `<->` → latent node) or parsed but not analyzed. */
+  warnings: string[];
 }
 
 export const ENGINE_SEMVER: string;
@@ -136,6 +152,15 @@ export function enumeratePaths(
   opts?: { maxLen?: number; maxPaths?: number; maxSteps?: number }
 ): EnumeratePathsResult;
 export function dSeparated(x: string, y: string, Z: string[], edges: EngineEdge[]): boolean;
+export function makeDSeparator(edges: EngineEdge[]): (x: string, y: string, Z: string[]) => boolean;
+export const ADJUSTMENT_ENUM_CAP: number;
+export function checkAdjustmentSet(
+  exposure: string,
+  outcome: string,
+  Z: string[],
+  nodes: EngineNode[],
+  edges: EngineEdge[]
+): AdjustmentSetCheck;
 export function isCollider(node: string, prev: string, next: string, edges: EngineEdge[]): boolean;
 export function isDirectedCausalPath(path: string[], edges: EngineEdge[]): boolean;
 export function pathBlocked(path: string[], Z: string[], edges: EngineEdge[]): boolean;
