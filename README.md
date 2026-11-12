@@ -44,8 +44,8 @@ The graph updates in place. Move the new node manually, then ask the agent to re
 | `remove_node` | Removes a node and its incident edges. |
 | `add_edge` | Adds a directed causal claim; duplicate, self, and cyclic edges are rejected. |
 | `remove_edge` | Removes a directed causal claim. |
-| `analyze_current_dag` | Returns open backdoor paths, minimal sufficient adjustment sets, identifiability, and diagnostics. |
-| `check_adjustment_set` | Checks a proposed set against the encoded backdoor paths. |
+| `analyze_current_dag` | Returns open backdoor paths, minimal sufficient adjustment sets, identifiability, and diagnostics. Identifiability is exact at any graph size; a flag marks when the list of minimal sets is not exhaustive. |
+| `check_adjustment_set` | Checks whether a proposed set is a valid adjustment set: it must block every encoded backdoor path and contain no descendant of the exposure (such as a mediator). Reports both conditions. |
 | `generate_analysis_code` | Generates R/dagitty or Python/NetworkX code for the live graph. |
 | `simulate_current_dag` | Runs the existing linear Gaussian SEM for the live graph, opens the visible simulation result, and returns bounded summaries, correlations, effect estimates, and a 10-row preview. |
 
